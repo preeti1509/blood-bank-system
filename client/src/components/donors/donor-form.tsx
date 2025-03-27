@@ -74,13 +74,13 @@ export default function DonorForm({ initialData, onSubmit, isSubmitting, onCance
         
         <div className="space-y-2">
           <Label htmlFor="bloodType">Blood Type</Label>
-          <Select value={bloodType} onValueChange={setBloodType}>
+          <Select value={bloodType} onValueChange={setBloodType} required>
             <SelectTrigger id="bloodType">
               <SelectValue placeholder="Select blood type" />
             </SelectTrigger>
             <SelectContent>
               {bloodTypeEnum.options.map((type) => (
-                <SelectItem key={type} value={type}>
+                <SelectItem key={type} value={type || ""}>
                   {type}
                 </SelectItem>
               ))}
