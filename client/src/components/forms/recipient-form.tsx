@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { z } from "zod";
-import { insertRecipientSchema, BLOOD_TYPES } from "@shared/schema";
+import { insertRecipientSchema, bloodTypeEnum } from "@shared/schema";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +44,10 @@ const formSchema = insertRecipientSchema.extend({
 type RecipientFormValues = z.infer<typeof formSchema>;
 
 interface RecipientFormProps {
+  initialData?: any;
+  onSubmit: (data: any) => void;
+  isSubmitting: boolean;
+  onCancel: () => void;
   defaultValues?: Partial<RecipientFormValues>;
   onSuccess?: () => void;
   isEdit?: boolean;
@@ -51,6 +55,10 @@ interface RecipientFormProps {
 }
 
 export function RecipientForm({
+  initialData,
+  onSubmit: submitHandler,
+  isSubmitting,
+  onCancel,
   defaultValues,
   onSuccess,
   isEdit = false,
@@ -124,7 +132,11 @@ export function RecipientForm({
   });
 
   const onSubmit = (values: RecipientFormValues) => {
-    mutation.mutate(values);
+    if (submitHandler) {
+      submitHandler(values);
+    } else {
+      mutation.mutate(values);
+    }
   };
 
   return (
@@ -161,7 +173,7 @@ export function RecipientForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {BLOOD_TYPES.map((type) => (
+                    {bloodTypeEnum.options.map((type) => (
                       <SelectItem key={type} value={type}>
                         {type}
                       </SelectItem>
@@ -379,12 +391,12 @@ export function RecipientForm({
           <Button
             type="button"
             variant="outline"
-            onClick={() => onSuccess && onSuccess()}
+            onClick={onCancel || (() => onSuccess && onSuccess())}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving..." : isEdit ? "Update Recipient" : "Add Recipient"}
+          <Button type="submit" disabled={isSubmitting || mutation.isPending}>
+            {isSubmitting || mutation.isPending ? "Saving..." : isEdit ? "Update Recipient" : "Add Recipient"}
           </Button>
         </div>
       </form>

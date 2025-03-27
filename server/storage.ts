@@ -7,6 +7,8 @@ import {
   type BloodType, type RequestStatus
 } from "@shared/schema";
 import { add, format, differenceInDays } from "date-fns";
+import { db } from "./db";
+import { eq, and, desc, gte, lte, isNull, count, sum, gt, lt } from "drizzle-orm";
 
 // Storage interface
 export interface IStorage {
@@ -787,4 +789,384 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database storage implementation
+export class DatabaseStorage implements IStorage {
+  // User methods
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
+  }
+
+  async listUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  // Hospital methods
+  async getHospital(id: number): Promise<Hospital | undefined> {
+    const [hospital] = await db.select().from(hospitals).where(eq(hospitals.id, id));
+    return hospital;
+  }
+
+  async createHospital(hospital: InsertHospital): Promise<Hospital> {
+    const [newHospital] = await db.insert(hospitals).values(hospital).returning();
+    return newHospital;
+  }
+
+  async updateHospital(id: number, hospital: Partial<InsertHospital>): Promise<Hospital | undefined> {
+    const [updatedHospital] = await db
+      .update(hospitals)
+      .set(hospital)
+      .where(eq(hospitals.id, id))
+      .returning();
+    return updatedHospital;
+  }
+
+  async listHospitals(): Promise<Hospital[]> {
+    return await db.select().from(hospitals);
+  }
+
+  // Donor methods
+  async getDonor(id: number): Promise<Donor | undefined> {
+    const [donor] = await db.select().from(donors).where(eq(donors.id, id));
+    return donor;
+  }
+
+  async createDonor(donor: InsertDonor): Promise<Donor> {
+    const [newDonor] = await db.insert(donors).values(donor).returning();
+    return newDonor;
+  }
+
+  async updateDonor(id: number, donor: Partial<InsertDonor>): Promise<Donor | undefined> {
+    const [updatedDonor] = await db
+      .update(donors)
+      .set(donor)
+      .where(eq(donors.id, id))
+      .returning();
+    return updatedDonor;
+  }
+
+  async listDonors(): Promise<Donor[]> {
+    return await db.select().from(donors);
+  }
+
+  // Recipient methods
+  async getRecipient(id: number): Promise<Recipient | undefined> {
+    const [recipient] = await db.select().from(recipients).where(eq(recipients.id, id));
+    return recipient;
+  }
+
+  async createRecipient(recipient: InsertRecipient): Promise<Recipient> {
+    const [newRecipient] = await db.insert(recipients).values(recipient).returning();
+    return newRecipient;
+  }
+
+  async updateRecipient(id: number, recipient: Partial<InsertRecipient>): Promise<Recipient | undefined> {
+    const [updatedRecipient] = await db
+      .update(recipients)
+      .set(recipient)
+      .where(eq(recipients.id, id))
+      .returning();
+    return updatedRecipient;
+  }
+
+  async listRecipients(): Promise<Recipient[]> {
+    return await db.select().from(recipients);
+  }
+
+  // Blood inventory methods
+  async getBloodInventoryItem(id: number): Promise<BloodInventoryItem | undefined> {
+    const [item] = await db.select().from(bloodInventory).where(eq(bloodInventory.id, id));
+    return item;
+  }
+
+  async createBloodInventoryItem(item: InsertBloodInventoryItem): Promise<BloodInventoryItem> {
+    const [newItem] = await db.insert(bloodInventory).values(item).returning();
+    return newItem;
+  }
+
+  async updateBloodInventoryItem(id: number, item: Partial<InsertBloodInventoryItem>): Promise<BloodInventoryItem | undefined> {
+    const [updatedItem] = await db
+      .update(bloodInventory)
+      .set(item)
+      .where(eq(bloodInventory.id, id))
+      .returning();
+    return updatedItem;
+  }
+
+  async listBloodInventory(): Promise<BloodInventoryItem[]> {
+    return await db.select().from(bloodInventory);
+  }
+
+  async getBloodTypeSummary(): Promise<BloodTypeSummary[]> {
+    const now = new Date();
+    const inventory = await db.select().from(bloodInventory).where(eq(bloodInventory.status, "available"));
+    
+    // Group by blood type
+    const bloodTypesMap = new Map<BloodType, {
+      units: number;
+      expiringUnits: number;
+      expiringDays: number;
+    }>();
+    
+    // Process inventory data
+    let totalUnits = 0;
+    inventory.forEach(item => {
+      totalUnits += item.units;
+      
+      if (!bloodTypesMap.has(item.blood_type)) {
+        bloodTypesMap.set(item.blood_type, {
+          units: 0,
+          expiringUnits: 0,
+          expiringDays: 0
+        });
+      }
+      
+      const data = bloodTypesMap.get(item.blood_type)!;
+      data.units += item.units;
+      
+      // Check for expiring items (within next 7 days)
+      const daysToExpire = differenceInDays(item.expiry_date, now);
+      if (daysToExpire <= 7 && daysToExpire >= 0) {
+        data.expiringUnits += item.units;
+        data.expiringDays = Math.min(data.expiringDays || daysToExpire, daysToExpire);
+      }
+    });
+    
+    // Create summary
+    const result: BloodTypeSummary[] = [];
+    bloodTypesMap.forEach((data, bloodType) => {
+      const percentage = totalUnits > 0 ? (data.units / totalUnits) * 100 : 0;
+      result.push({
+        bloodType,
+        units: data.units,
+        percentage,
+        expiringUnits: data.expiringUnits,
+        expiringDays: data.expiringDays,
+        isCritical: data.units < 10
+      });
+    });
+    
+    return result;
+  }
+
+  // Blood request methods
+  async getBloodRequest(id: number): Promise<BloodRequest | undefined> {
+    const [request] = await db.select().from(bloodRequests).where(eq(bloodRequests.id, id));
+    return request;
+  }
+
+  async createBloodRequest(request: InsertBloodRequest): Promise<BloodRequest> {
+    const [newRequest] = await db.insert(bloodRequests).values(request).returning();
+    return newRequest;
+  }
+
+  async updateBloodRequest(id: number, request: Partial<InsertBloodRequest>): Promise<BloodRequest | undefined> {
+    const [updatedRequest] = await db
+      .update(bloodRequests)
+      .set(request)
+      .where(eq(bloodRequests.id, id))
+      .returning();
+    return updatedRequest;
+  }
+
+  async listBloodRequests(status?: RequestStatus): Promise<BloodRequest[]> {
+    if (status) {
+      return await db.select().from(bloodRequests).where(eq(bloodRequests.status, status));
+    }
+    return await db.select().from(bloodRequests);
+  }
+
+  // Transaction methods
+  async getTransaction(id: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id));
+    return transaction;
+  }
+
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const [newTransaction] = await db.insert(transactions).values(transaction).returning();
+    return newTransaction;
+  }
+
+  async listTransactions(): Promise<Transaction[]> {
+    return await db.select().from(transactions);
+  }
+
+  // Alert methods
+  async getAlert(id: number): Promise<Alert | undefined> {
+    const [alert] = await db.select().from(alerts).where(eq(alerts.id, id));
+    return alert;
+  }
+
+  async createAlert(alert: InsertAlert): Promise<Alert> {
+    const [newAlert] = await db.insert(alerts).values(alert).returning();
+    return newAlert;
+  }
+
+  async updateAlert(id: number, alert: Partial<InsertAlert>): Promise<Alert | undefined> {
+    const [updatedAlert] = await db
+      .update(alerts)
+      .set(alert)
+      .where(eq(alerts.id, id))
+      .returning();
+    return updatedAlert;
+  }
+
+  async listAlerts(activeOnly: boolean = false): Promise<Alert[]> {
+    if (activeOnly) {
+      return await db
+        .select()
+        .from(alerts)
+        .where(and(eq(alerts.is_active, true), gte(alerts.expires_at, new Date())));
+    }
+    return await db.select().from(alerts);
+  }
+
+  // Dashboard methods
+  async getStatsSummary(): Promise<StatsSummary> {
+    // Get total donations (count transactions with type donation)
+    const [donationsResult] = await db
+      .select({ count: count() })
+      .from(transactions)
+      .where(eq(transactions.transaction_type, "donation"));
+    
+    // Get count of hospitals
+    const [hospitalsResult] = await db
+      .select({ count: count() })
+      .from(hospitals)
+      .where(eq(hospitals.status, "active"));
+    
+    // Get active donors (donated in last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    
+    const [activeDonorsResult] = await db
+      .select({ count: count() })
+      .from(donors)
+      .where(gte(donors.last_donation_date, sixMonthsAgo));
+    
+    // Get pending requests
+    const [pendingRequestsResult] = await db
+      .select({ count: count() })
+      .from(bloodRequests)
+      .where(eq(bloodRequests.status, "pending"));
+    
+    return {
+      totalDonations: donationsResult?.count || 0,
+      hospitalsServed: hospitalsResult?.count || 0,
+      activeDonors: activeDonorsResult?.count || 0,
+      pendingRequests: pendingRequestsResult?.count || 0
+    };
+  }
+
+  async getRecentActivities(limit: number = 10): Promise<RecentActivity[]> {
+    const activities: RecentActivity[] = [];
+    
+    // Get recent donations (transactions)
+    const recentTransactions = await db
+      .select()
+      .from(transactions)
+      .orderBy(desc(transactions.created_at))
+      .limit(limit);
+    
+    recentTransactions.forEach(transaction => {
+      let activityType: "donation" | "request" | "alert" | "expiry";
+      let title = "";
+      let description = "";
+      let iconColor = "";
+      let icon = "";
+      
+      if (transaction.transaction_type === "donation") {
+        activityType = "donation";
+        title = `Blood Donation (${transaction.blood_type})`;
+        description = `${transaction.units} units donated`;
+        iconColor = "text-green-500";
+        icon = "heart";
+      } else if (transaction.transaction_type === "distribution") {
+        activityType = "request";
+        title = `Blood Distribution (${transaction.blood_type})`;
+        description = `${transaction.units} units distributed`;
+        iconColor = "text-blue-500";
+        icon = "truck";
+      } else {
+        activityType = "request";
+        title = `Blood Transfer (${transaction.blood_type})`;
+        description = `${transaction.units} units transferred`;
+        iconColor = "text-orange-500";
+        icon = "repeat";
+      }
+      
+      activities.push({
+        id: transaction.id,
+        type: activityType,
+        title,
+        description,
+        time: this.formatTimeAgo(transaction.created_at),
+        timestamp: transaction.created_at,
+        iconColor,
+        icon
+      });
+    });
+    
+    // Get recent alerts
+    const recentAlerts = await db
+      .select()
+      .from(alerts)
+      .where(eq(alerts.is_active, true))
+      .orderBy(desc(alerts.created_at))
+      .limit(limit);
+    
+    recentAlerts.forEach(alert => {
+      const iconColor = alert.level === "critical" 
+        ? "text-red-500" 
+        : (alert.level === "warning" ? "text-amber-500" : "text-blue-500");
+      
+      activities.push({
+        id: alert.id,
+        type: "alert",
+        title: `Alert: ${alert.alert_type}`,
+        description: alert.message,
+        time: this.formatTimeAgo(alert.created_at),
+        timestamp: alert.created_at,
+        iconColor,
+        icon: "bell"
+      });
+    });
+    
+    // Sort by timestamp and limit
+    return activities
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit);
+  }
+  
+  private formatTimeAgo(date: Date): string {
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) {
+      return "Just now";
+    } else if (diffInMinutes < 60) {
+      return `${diffInMinutes} ${diffInMinutes === 1 ? "minute" : "minutes"} ago`;
+    } else if (diffInMinutes < 24 * 60) {
+      const hours = Math.floor(diffInMinutes / 60);
+      return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+    } else if (diffInMinutes < 7 * 24 * 60) {
+      const days = Math.floor(diffInMinutes / (24 * 60));
+      return `${days} ${days === 1 ? "day" : "days"} ago`;
+    } else {
+      return format(date, "MMM d, yyyy");
+    }
+  }
+}
+
+// Use database storage
+export const storage = new DatabaseStorage();
