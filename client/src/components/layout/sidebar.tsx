@@ -68,9 +68,9 @@ export default function Sidebar({ showMobile, onCloseMobile }: SidebarProps) {
                 href={item.path}
                 onClick={() => showMobile && onCloseMobile()}
               >
-                <a 
+                <div 
                   className={cn(
-                    "flex items-center px-4 py-3 rounded-md group",
+                    "flex items-center px-4 py-3 rounded-md group cursor-pointer",
                     isActive 
                       ? "text-gray-900 bg-gray-200 font-medium" 
                       : "text-gray-600 hover:bg-gray-100"
@@ -83,7 +83,7 @@ export default function Sidebar({ showMobile, onCloseMobile }: SidebarProps) {
                     {item.icon}
                   </span>
                   <span>{item.label}</span>
-                </a>
+                </div>
               </Link>
             );
           })}

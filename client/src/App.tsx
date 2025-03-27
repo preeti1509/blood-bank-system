@@ -15,6 +15,7 @@ import { useState } from "react";
 
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
+import { WebSocketProvider } from "./hooks/use-websocket";
 
 function App() {
   const [location] = useLocation();
@@ -33,38 +34,40 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex h-screen overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar 
-          showMobile={showMobileSidebar} 
-          onCloseMobile={() => setShowMobileSidebar(false)} 
-        />
-
-        {/* Main Content */}
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <Header 
-            title={getPageTitle()} 
-            onMenuClick={toggleMobileSidebar} 
+      <WebSocketProvider>
+        <div className="flex h-screen overflow-hidden">
+          {/* Sidebar */}
+          <Sidebar 
+            showMobile={showMobileSidebar} 
+            onCloseMobile={() => setShowMobileSidebar(false)} 
           />
 
-          {/* Page Content */}
-          <main className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 md:p-8">
-            <Switch>
-              <Route path="/" component={Dashboard} />
-              <Route path="/hospitals" component={Hospitals} />
-              <Route path="/inventory" component={Inventory} />
-              <Route path="/transactions" component={Transactions} />
-              <Route path="/donors" component={Donors} />
-              <Route path="/recipients" component={Recipients} />
-              <Route path="/alerts" component={Alerts} />
-              <Route path="/settings" component={Settings} />
-              <Route component={NotFound} />
-            </Switch>
-          </main>
-        </div>
+          {/* Main Content */}
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <Header 
+              title={getPageTitle()} 
+              onMenuClick={toggleMobileSidebar} 
+            />
 
-        <Toaster />
-      </div>
+            {/* Page Content */}
+            <main className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 md:p-8">
+              <Switch>
+                <Route path="/" component={Dashboard} />
+                <Route path="/hospitals" component={Hospitals} />
+                <Route path="/inventory" component={Inventory} />
+                <Route path="/transactions" component={Transactions} />
+                <Route path="/donors" component={Donors} />
+                <Route path="/recipients" component={Recipients} />
+                <Route path="/alerts" component={Alerts} />
+                <Route path="/settings" component={Settings} />
+                <Route component={NotFound} />
+              </Switch>
+            </main>
+          </div>
+
+          <Toaster />
+        </div>
+      </WebSocketProvider>
     </QueryClientProvider>
   );
 }

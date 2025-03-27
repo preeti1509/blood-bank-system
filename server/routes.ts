@@ -8,6 +8,7 @@ import { bloodTypeEnum, requestPriorityEnum, requestStatusEnum,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { WebSocketServer, WebSocket } from "ws";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Error handling middleware for Zod validation errors
@@ -378,7 +379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create an alert for emergency requests
       if (req.body.priority === "emergency") {
-        await storage.createAlert({
+        const alert = await storage.createAlert({
           alert_type: "new_request",
           message: `Emergency request for ${req.body.units} units of ${req.body.blood_type} blood`,
           blood_type: req.body.blood_type,
@@ -386,6 +387,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           is_active: true,
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
         });
+        
+        // Broadcast emergency request alert to all connected clients via WebSocket
+        if (app.locals.broadcastMessage) {
+          app.locals.broadcastMessage('emergency_request', {
+            request,
+            alert,
+            hospital_id: req.body.hospital_id,
+            blood_type: req.body.blood_type,
+            units: req.body.units,
+            priority: req.body.priority
+          });
+        }
       }
       
       const hospital = await storage.getHospital(request.hospital_id);
@@ -416,7 +429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userId = req.body.performed_by || 1; // Default to admin user if not specified
         
         // Create a distribution transaction
-        await storage.createTransaction({
+        const transaction = await storage.createTransaction({
           transaction_type: "distribution",
           blood_type: request.blood_type,
           units: request.units,
@@ -426,9 +439,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           notes: `Fulfilling request #${request.id}`,
           performed_by: userId
         });
+        
+        // Broadcast the fulfilled request via WebSocket
+        if (app.locals.broadcastMessage) {
+          app.locals.broadcastMessage('request_fulfilled', {
+            request,
+            transaction
+          });
+        }
       }
       
       const hospital = await storage.getHospital(request.hospital_id);
+      
+      // Send the updated request status via WebSocket
+      if (app.locals.broadcastMessage) {
+        app.locals.broadcastMessage('request_updated', {
+          request: {
+            ...request,
+            hospital: hospital ? {
+              id: hospital.id,
+              name: hospital.name,
+              contact_person: hospital.contact_person
+            } : null
+          },
+          status: request.status
+        });
+      }
       
       res.json({
         ...request,
@@ -469,6 +505,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/transactions", validateRequest(insertTransactionSchema), async (req, res) => {
     try {
       const transaction = await storage.createTransaction(req.body);
+      
+      // Broadcast the new transaction to all connected clients via WebSocket
+      if (app.locals.broadcastMessage) {
+        app.locals.broadcastMessage('new_transaction', transaction);
+      }
+      
       res.status(201).json(transaction);
     } catch (error) {
       res.status(500).json({ error: "Failed to create transaction" });
@@ -502,6 +544,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/alerts", validateRequest(insertAlertSchema), async (req, res) => {
     try {
       const alert = await storage.createAlert(req.body);
+      
+      // Broadcast new alert to all connected clients via WebSocket
+      if (app.locals.broadcastMessage) {
+        app.locals.broadcastMessage('new_alert', alert);
+      }
+      
       res.status(201).json(alert);
     } catch (error) {
       res.status(500).json({ error: "Failed to create alert" });
@@ -522,5 +570,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Add WebSocket server on a distinct path to avoid conflicts with Vite's HMR
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  // Store connected clients
+  const clients = new Set<WebSocket>();
+  
+  wss.on('connection', (ws) => {
+    // Add new client to the set
+    clients.add(ws);
+    
+    console.log('New WebSocket client connected');
+    
+    // Send initial active alerts to the client
+    storage.listAlerts(true).then(alerts => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'alerts',
+          data: alerts
+        }));
+      }
+    });
+    
+    // Handle messages from client
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        console.log('Received WebSocket message:', data);
+        
+        // Handle different message types
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }));
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
+    });
+    
+    // Handle client disconnection
+    ws.on('close', () => {
+      clients.delete(ws);
+      console.log('WebSocket client disconnected');
+    });
+  });
+  
+  // Add function to broadcast messages to all connected clients
+  // This can be used in route handlers to notify clients about important events
+  app.locals.broadcastMessage = (type: string, data: any) => {
+    const message = JSON.stringify({ type, data });
+    clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  };
+  
   return httpServer;
 }
