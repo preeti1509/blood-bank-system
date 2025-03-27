@@ -30,23 +30,46 @@ export default function DonorForm({ initialData, onSubmit, isSubmitting, onCance
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    onSubmit({
-      first_name: firstName,
-      last_name: lastName,
-      blood_type: bloodType,
-      gender,
-      date_of_birth: new Date(dateOfBirth),
-      phone,
-      email,
-      address,
-      city,
-      state,
-      zip,
-      last_donation_date: lastDonationDate ? new Date(lastDonationDate) : null,
-      is_eligible: true, // Default value, adjust as needed
-      medical_notes: medicalNotes,
-    });
+
+    // Validation check  
+    if (!firstName || !lastName || !bloodType || !gender || !dateOfBirth || !phone) {
+      return;
+    }
+
+    try {
+      // Parse dates using Date constructor
+      const birthDate = new Date(dateOfBirth);
+      const donationDate = lastDonationDate ? new Date(lastDonationDate) : null;
+      
+      // Validate the date - will throw if invalid
+      if (isNaN(birthDate.getTime())) {
+        throw new Error("Invalid date of birth");
+      }
+      
+      if (donationDate && isNaN(donationDate.getTime())) {
+        throw new Error("Invalid last donation date");
+      }
+      
+      onSubmit({
+        first_name: firstName,
+        last_name: lastName,
+        blood_type: bloodType,
+        gender,
+        date_of_birth: birthDate,
+        phone,
+        email: email || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zip: zip || null,
+        last_donation_date: donationDate,
+        is_eligible: true, // Default value for new donors
+        medical_notes: medicalNotes || null,
+      });
+    } catch (error) {
+      console.error("Form submission error:", error);
+      // You could show an error toast here if needed
+    }
   };
   
   return (

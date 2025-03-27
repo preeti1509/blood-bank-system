@@ -158,11 +158,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/donors", validateRequest(insertDonorSchema), async (req, res) => {
+  app.post("/api/donors", async (req, res) => {
     try {
+      // For date fields, validate and ensure they are Date objects
+      if (req.body.date_of_birth && typeof req.body.date_of_birth === 'string') {
+        req.body.date_of_birth = new Date(req.body.date_of_birth);
+      }
+      
+      if (req.body.last_donation_date && typeof req.body.last_donation_date === 'string') {
+        req.body.last_donation_date = new Date(req.body.last_donation_date);
+      }
+      
+      if (req.body.next_eligible_date && typeof req.body.next_eligible_date === 'string') {
+        req.body.next_eligible_date = new Date(req.body.next_eligible_date);
+      }
+      
+      // Now validate with the schema
+      try {
+        req.body = insertDonorSchema.parse(req.body);
+      } catch (error) {
+        if (error instanceof ZodError) {
+          const validationError = fromZodError(error);
+          return res.status(400).json({ 
+            error: "Validation Error", 
+            message: validationError.message
+          });
+        }
+        throw error;
+      }
+      
       const donor = await storage.createDonor(req.body);
       res.status(201).json(donor);
     } catch (error) {
+      console.error("Error creating donor:", error);
       res.status(500).json({ error: "Failed to create donor" });
     }
   });
@@ -203,11 +231,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/recipients", validateRequest(insertRecipientSchema), async (req, res) => {
+  app.post("/api/recipients", async (req, res) => {
     try {
+      // For date fields, validate and ensure they are Date objects
+      if (req.body.date_of_birth && typeof req.body.date_of_birth === 'string') {
+        req.body.date_of_birth = new Date(req.body.date_of_birth);
+      }
+      
+      // Now validate with the schema
+      try {
+        req.body = insertRecipientSchema.parse(req.body);
+      } catch (error) {
+        if (error instanceof ZodError) {
+          const validationError = fromZodError(error);
+          return res.status(400).json({ 
+            error: "Validation Error", 
+            message: validationError.message
+          });
+        }
+        throw error;
+      }
+      
       const recipient = await storage.createRecipient(req.body);
       res.status(201).json(recipient);
     } catch (error) {
+      console.error("Error creating recipient:", error);
       res.status(500).json({ error: "Failed to create recipient" });
     }
   });
