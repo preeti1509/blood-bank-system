@@ -1,11 +1,45 @@
-import { useState } from "react";
+import React from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { bloodTypeEnum } from "@shared/schema";
-import { Button } from "@/components/ui/button";
+
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
+
+// Define form schema
+const formSchema = z.object({
+  first_name: z.string().min(2, "First name is required"),
+  last_name: z.string().min(2, "Last name is required"),
+  gender: z.string().min(1, "Gender is required"),
+  blood_type: z.string().min(1, "Blood type is required"),
+  date_of_birth: z.string().min(1, "Date of birth is required"),
+  phone: z.string().min(1, "Phone number is required"),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  address: z.string().optional().or(z.literal("")),
+  city: z.string().optional().or(z.literal("")),
+  state: z.string().optional().or(z.literal("")),
+  zip: z.string().optional().or(z.literal("")),
+  hospital_id: z.number().optional(),
+  medical_notes: z.string().optional().or(z.literal("")),
+});
 
 interface RecipientFormProps {
   initialData?: any;
@@ -15,227 +49,256 @@ interface RecipientFormProps {
 }
 
 export default function RecipientForm({ initialData, onSubmit, isSubmitting, onCancel }: RecipientFormProps) {
-  const [firstName, setFirstName] = useState(initialData?.first_name || "");
-  const [lastName, setLastName] = useState(initialData?.last_name || "");
-  const [bloodType, setBloodType] = useState(initialData?.blood_type || "");
-  const [gender, setGender] = useState(initialData?.gender || "");
-  const [dateOfBirth, setDateOfBirth] = useState(initialData?.date_of_birth ? new Date(initialData.date_of_birth).toISOString().split('T')[0] : "");
-  const [phone, setPhone] = useState(initialData?.phone || "");
-  const [email, setEmail] = useState(initialData?.email || "");
-  const [address, setAddress] = useState(initialData?.address || "");
-  const [city, setCity] = useState(initialData?.city || "");
-  const [state, setState] = useState(initialData?.state || "");
-  const [zip, setZip] = useState(initialData?.zip || "");
-  const [hospitalId, setHospitalId] = useState(initialData?.hospital_id?.toString() || "");
-  const [medicalNotes, setMedicalNotes] = useState(initialData?.medical_notes || "");
-  
-  // Fetch hospitals for dropdown
-  const { data: hospitals } = useQuery({
-    queryKey: ['/api/hospitals']
-  });
-  
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validation check
-    if (!firstName || !lastName || !bloodType || !gender || !dateOfBirth || !phone) {
-      return;
-    }
-    
+  // Format date for the form
+  const formatDateForInput = (dateString?: string) => {
+    if (!dateString) return "";
     try {
-      // Parse dates using Date constructor
-      const birthDate = new Date(dateOfBirth);
-      
-      // Validate the date - will throw if invalid
-      if (isNaN(birthDate.getTime())) {
-        throw new Error("Invalid date of birth");
-      }
-      
-      onSubmit({
-        first_name: firstName,
-        last_name: lastName,
-        blood_type: bloodType,
-        gender,
-        date_of_birth: birthDate,
-        phone,
-        email: email || null,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zip: zip || null,
-        hospital_id: hospitalId ? parseInt(hospitalId) : null,
-        medical_notes: medicalNotes || null
-      });
-    } catch (error) {
-      console.error("Form submission error:", error);
-      // You could show an error toast here if needed
+      const date = new Date(dateString);
+      return format(date, "yyyy-MM-dd");
+    } catch (e) {
+      return "";
     }
   };
-  
+
+  // Initialize form with default values or provided data
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      first_name: initialData?.first_name || "",
+      last_name: initialData?.last_name || "",
+      gender: initialData?.gender || "",
+      blood_type: initialData?.blood_type || "",
+      date_of_birth: formatDateForInput(initialData?.date_of_birth) || "",
+      phone: initialData?.phone || "",
+      email: initialData?.email || "",
+      address: initialData?.address || "",
+      city: initialData?.city || "",
+      state: initialData?.state || "",
+      zip: initialData?.zip || "",
+      hospital_id: initialData?.hospital_id,
+      medical_notes: initialData?.medical_notes || "",
+    },
+  });
+
+  const handleFormSubmit = (data: any) => {
+    // Format the data
+    const formattedData = {
+      ...data,
+      // Convert string date to Date object
+      date_of_birth: data.date_of_birth ? new Date(data.date_of_birth) : undefined,
+    };
+    
+    onSubmit(formattedData);
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="firstName">First Name</Label>
-          <Input
-            id="firstName"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="first_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>First Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="First name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+            control={form.control}
+            name="last_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Last Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Last name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+            control={form.control}
+            name="gender"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Gender</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+            control={form.control}
+            name="blood_type"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Blood Type</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select blood type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {bloodTypeEnum.options.map((type) => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+            control={form.control}
+            name="date_of_birth"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Date of Birth</FormLabel>
+                <FormControl>
+                  <Input type="date" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Phone</FormLabel>
+                <FormControl>
+                  <Input placeholder="Phone number" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
         </div>
         
-        <div className="space-y-2">
-          <Label htmlFor="lastName">Last Name</Label>
-          <Input
-            id="lastName"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
+        <div className="space-y-4">
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email (Optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="Email address" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+            control={form.control}
+            name="address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Address (Optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="Street address" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <FormField
+              control={form.control}
+              name="city"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>City (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="City" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="state"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>State (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="State" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="zip"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>ZIP (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="ZIP code" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          
+          <FormField
+            control={form.control}
+            name="medical_notes"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Medical Notes (Optional)</FormLabel>
+                <FormControl>
+                  <Textarea 
+                    placeholder="Add any relevant medical notes or history" 
+                    className="min-h-[100px]"
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
         </div>
         
-        <div className="space-y-2">
-          <Label htmlFor="bloodType">Blood Type</Label>
-          <Select value={bloodType} onValueChange={setBloodType} required>
-            <SelectTrigger id="bloodType">
-              <SelectValue placeholder="Select blood type" />
-            </SelectTrigger>
-            <SelectContent>
-              {bloodTypeEnum.options.map((type) => (
-                <SelectItem key={type} value={type || ""}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Saving..." : initialData ? "Update Recipient" : "Add Recipient"}
+          </Button>
         </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="gender">Gender</Label>
-          <Select value={gender} onValueChange={setGender}>
-            <SelectTrigger id="gender">
-              <SelectValue placeholder="Select gender" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="female">Female</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="dateOfBirth">Date of Birth</Label>
-          <Input
-            id="dateOfBirth"
-            type="date"
-            value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
-            required
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone Number</Label>
-          <Input
-            id="phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            required
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="email">Email (Optional)</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="address">Address</Label>
-          <Input
-            id="address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="city">City</Label>
-          <Input
-            id="city"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="state">State</Label>
-          <Input
-            id="state"
-            value={state}
-            onChange={(e) => setState(e.target.value)}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="zip">ZIP Code</Label>
-          <Input
-            id="zip"
-            value={zip}
-            onChange={(e) => setZip(e.target.value)}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="hospitalId">Associated Hospital (Optional)</Label>
-          <Select value={hospitalId} onValueChange={setHospitalId}>
-            <SelectTrigger id="hospitalId">
-              <SelectValue placeholder="Select hospital" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">None</SelectItem>
-              {hospitals?.map((hospital: any) => (
-                <SelectItem key={hospital.id} value={hospital.id.toString()}>
-                  {hospital.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="medicalNotes">Medical Notes (Optional)</Label>
-        <Textarea
-          id="medicalNotes"
-          value={medicalNotes}
-          onChange={(e) => setMedicalNotes(e.target.value)}
-          className="h-24"
-        />
-      </div>
-      
-      <div className="flex justify-end space-x-2 pt-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          disabled={isSubmitting}
-        >
-          Cancel
-        </Button>
-        <Button 
-          type="submit" 
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Saving..." : initialData ? "Update Recipient" : "Add Recipient"}
-        </Button>
-      </div>
-    </form>
+      </form>
+    </Form>
   );
 }

@@ -1,15 +1,28 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { bloodTypeEnum, Donor } from "@shared/schema";
+import { addDays } from "date-fns";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { bloodTypeEnum } from "@shared/schema";
-import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { Donor } from "@shared/schema";
-import { format, addDays } from "date-fns";
 
 interface AddInventoryModalProps {
   isOpen: boolean;
@@ -20,32 +33,32 @@ export default function AddInventoryModal({ isOpen, onClose }: AddInventoryModal
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // Default expiry is 42 days from today (typical for blood)
-  const defaultExpiryDate = format(addDays(new Date(), 42), "yyyy-MM-dd");
-  
   // Form state
   const [bloodType, setBloodType] = useState<string>("");
   const [units, setUnits] = useState<string>("1");
-  const [donationDate, setDonationDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
-  const [expiryDate, setExpiryDate] = useState<string>(defaultExpiryDate);
+  const [donationDate, setDonationDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [expiryDate, setExpiryDate] = useState<string>("");
   const [donorId, setDonorId] = useState<string>("");
   
-  // Fetch donors for dropdown
+  // Fetch eligible donors for dropdown
   const { data: donors } = useQuery<Donor[]>({
     queryKey: ['/api/donors'],
-    enabled: isOpen,
+    select: (data) => data.filter(donor => 
+      donor.status === 'active' && (!donor.next_eligible_date || new Date(donor.next_eligible_date) <= new Date())
+    ),
   });
   
-  // Reset form when modal opens/closes
-  const resetForm = () => {
-    setBloodType("");
-    setUnits("1");
-    setDonationDate(format(new Date(), "yyyy-MM-dd"));
-    setExpiryDate(defaultExpiryDate);
-    setDonorId("");
-  };
+  const eligibleDonors = donors || [];
   
-  // Handle form submission
+  // Update expiry date when donation date changes (blood expires after 42 days)
+  useEffect(() => {
+    if (donationDate) {
+      const newExpiryDate = addDays(new Date(donationDate), 42);
+      setExpiryDate(newExpiryDate.toISOString().split('T')[0]);
+    }
+  }, [donationDate]);
+  
+  // Add inventory mutation
   const addInventoryMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await apiRequest('POST', '/api/inventory', data);
@@ -53,87 +66,90 @@ export default function AddInventoryModal({ isOpen, onClose }: AddInventoryModal
     },
     onSuccess: () => {
       toast({
-        title: "Inventory added",
-        description: "The blood units have been added to inventory.",
-        variant: "default",
+        title: "Success",
+        description: `${units} units of ${bloodType} blood added to inventory`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/blood-summary'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/activities'] });
-      
-      // Create transaction record for donation
-      if (donorId) {
-        createTransactionMutation.mutate({
-          transaction_type: "donation",
-          blood_type: bloodType,
-          units: parseInt(units),
-          source: donorId,
-          destination: "inventory",
-          notes: "Donation added to inventory",
-          performed_by: 1 // Default admin user
-        });
-      }
-      
-      onClose();
       resetForm();
+      onClose();
     },
     onError: (error) => {
       toast({
-        title: "Failed to add inventory",
-        description: error.toString(),
+        title: "Error",
+        description: `Failed to add inventory: ${error.message}`,
         variant: "destructive",
       });
-    }
+    },
   });
   
-  // Create transaction record
-  const createTransactionMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', '/api/transactions', data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-    }
-  });
+  const resetForm = () => {
+    setBloodType("");
+    setUnits("1");
+    setDonationDate(new Date().toISOString().split('T')[0]);
+    setExpiryDate("");
+    setDonorId("");
+  };
   
   const handleSubmit = () => {
-    // Validate form
-    if (!bloodType || !units || !donationDate || !expiryDate) {
+    if (!bloodType) {
       toast({
-        title: "Missing information",
-        description: "Please fill out all required fields.",
+        title: "Validation Error",
+        description: "Please select a blood type",
         variant: "destructive",
       });
       return;
     }
     
-    // Submit request
-    addInventoryMutation.mutate({
+    if (!donationDate) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a donation date",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!expiryDate) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter an expiry date",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate units is a positive number
+    const unitsNumber = parseInt(units);
+    if (isNaN(unitsNumber) || unitsNumber < 1) {
+      toast({
+        title: "Validation Error",
+        description: "Units must be a positive number",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Convert form data to API format
+    const data = {
       blood_type: bloodType,
-      units: parseInt(units),
+      units: unitsNumber,
       donation_date: new Date(donationDate),
       expiry_date: new Date(expiryDate),
+      donor_id: donorId ? parseInt(donorId) : undefined,
       status: "available",
-      donor_id: donorId ? parseInt(donorId) : null
-    });
+    };
+    
+    addInventoryMutation.mutate(data);
   };
   
-  // Filter for eligible donors only
-  const eligibleDonors = donors?.filter(donor => donor.is_eligible) || [];
-  
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) {
-        onClose();
-        resetForm();
-      }
-    }}>
+    <Dialog open={isOpen} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Add Blood Inventory</DialogTitle>
+          <DialogTitle>Add Blood to Inventory</DialogTitle>
           <DialogDescription>
-            Add blood units to the inventory. This will increase the available blood supply.
+            Enter details about the blood donation to add to inventory
           </DialogDescription>
         </DialogHeader>
         
@@ -149,9 +165,7 @@ export default function AddInventoryModal({ isOpen, onClose }: AddInventoryModal
                 </SelectTrigger>
                 <SelectContent>
                   {bloodTypeEnum.options.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -162,45 +176,49 @@ export default function AddInventoryModal({ isOpen, onClose }: AddInventoryModal
             <Label htmlFor="units" className="text-right">
               Units
             </Label>
-            <Input
-              id="units"
-              type="number"
-              min="1"
-              className="col-span-3"
-              value={units}
-              onChange={(e) => setUnits(e.target.value)}
-            />
+            <div className="col-span-3">
+              <Input
+                id="units"
+                type="number"
+                min="1"
+                value={units}
+                onChange={(e) => setUnits(e.target.value)}
+              />
+            </div>
           </div>
           
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="donationDate" className="text-right">
               Donation Date
             </Label>
-            <Input
-              id="donationDate"
-              type="date"
-              className="col-span-3"
-              value={donationDate}
-              onChange={(e) => setDonationDate(e.target.value)}
-            />
+            <div className="col-span-3">
+              <Input
+                id="donationDate"
+                type="date"
+                value={donationDate}
+                onChange={(e) => setDonationDate(e.target.value)}
+              />
+            </div>
           </div>
           
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="expiryDate" className="text-right">
               Expiry Date
             </Label>
-            <Input
-              id="expiryDate"
-              type="date"
-              className="col-span-3"
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-            />
+            <div className="col-span-3">
+              <Input
+                id="expiryDate"
+                type="date"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">Default is 42 days after donation date</p>
+            </div>
           </div>
           
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="donorId" className="text-right">
-              Donor (Optional)
+              Donor
             </Label>
             <div className="col-span-3">
               <Select value={donorId} onValueChange={setDonorId}>
