@@ -43,9 +43,6 @@ export default function AddInventoryModal({ isOpen, onClose }: AddInventoryModal
   // Fetch eligible donors for dropdown
   const { data: donors } = useQuery<Donor[]>({
     queryKey: ['/api/donors'],
-    select: (data) => data.filter(donor => 
-      donor.status === 'active' && (!donor.next_eligible_date || new Date(donor.next_eligible_date) <= new Date())
-    ),
   });
   
   const eligibleDonors = donors || [];
@@ -136,7 +133,7 @@ export default function AddInventoryModal({ isOpen, onClose }: AddInventoryModal
       units: unitsNumber,
       donation_date: new Date(donationDate),
       expiry_date: new Date(expiryDate),
-      donor_id: donorId ? parseInt(donorId) : undefined,
+      donor_id: donorId && donorId !== "none" ? parseInt(donorId) : undefined,
       status: "available",
     };
     
@@ -226,7 +223,7 @@ export default function AddInventoryModal({ isOpen, onClose }: AddInventoryModal
                   <SelectValue placeholder="Select donor (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {eligibleDonors.map((donor) => (
                     <SelectItem key={donor.id} value={donor.id.toString()}>
                       {donor.first_name} {donor.last_name} ({donor.blood_type})

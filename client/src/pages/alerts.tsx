@@ -145,11 +145,18 @@ export default function Alerts() {
       }
     }
     
+    // Handle the "none" value for blood_type
+    let bloodType = data.blood_type;
+    if (bloodType === "none") {
+      bloodType = undefined;
+    }
+    
     // Submit alert without the custom field
-    const { expires_in_days, ...alertData } = data;
+    const { expires_in_days, blood_type, ...alertData } = data;
     
     createAlertMutation.mutate({
       ...alertData,
+      blood_type: bloodType,
       expires_at: expiresAt,
     });
   };
@@ -372,7 +379,7 @@ export default function Alerts() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {bloodTypeEnum.options.map((type) => (
                           <SelectItem key={type} value={type}>
                             {type}

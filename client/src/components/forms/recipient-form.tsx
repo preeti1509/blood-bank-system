@@ -62,7 +62,7 @@ export function RecipientForm({
       last_name: "",
       gender: "",
       blood_type: "",
-      date_of_birth: "",
+      dateOfBirth: "",
       phone: "",
       email: "",
       address: "",
@@ -268,8 +268,8 @@ export function RecipientForm({
               <FormItem>
                 <FormLabel>Hospital (Optional)</FormLabel>
                 <Select 
-                  onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
-                  defaultValue={field.value?.toString()}
+                  onValueChange={(value) => field.onChange(value !== "none" ? parseInt(value) : undefined)}
+                  defaultValue={field.value?.toString() || "none"}
                 >
                   <FormControl>
                     <SelectTrigger>
@@ -277,8 +277,8 @@ export function RecipientForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
-                    {hospitals?.map((hospital) => (
+                    <SelectItem value="none">None</SelectItem>
+                    {Array.isArray(hospitals) && hospitals.map((hospital) => (
                       <SelectItem key={hospital.id} value={hospital.id.toString()}>
                         {hospital.name}
                       </SelectItem>
