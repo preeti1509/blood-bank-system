@@ -2,97 +2,93 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
+  showMobile: boolean;
+  onCloseMobile: () => void;
 }
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const [location] = useLocation();
+interface NavItem {
+  path: string;
+  label: string;
+  icon: string;
+}
 
-  const menuItems = [
-    { path: "/", icon: "dashboard", label: "Dashboard" },
-    { path: "/hospitals", icon: "local_hospital", label: "Hospitals" },
-    { path: "/inventory", icon: "inventory_2", label: "Inventory" },
-    { path: "/transactions", icon: "swap_horiz", label: "Transactions" },
-    { path: "/donors", icon: "person", label: "Donors" },
-    { path: "/recipients", icon: "personal_injury", label: "Recipients" },
-    { path: "/notifications", icon: "notifications", label: "Notifications", badge: 4 },
-    { path: "/reports", icon: "report", label: "Reports" },
-    { path: "/admin", icon: "admin_panel_settings", label: "Admin" },
-  ];
-  
+const navItems: NavItem[] = [
+  { path: "/", label: "Dashboard", icon: "dashboard" },
+  { path: "/hospitals", label: "Hospitals", icon: "local_hospital" },
+  { path: "/inventory", label: "Inventory", icon: "inventory" },
+  { path: "/transactions", label: "Transactions", icon: "swap_horiz" },
+  { path: "/donors", label: "Donors", icon: "people" },
+  { path: "/recipients", label: "Recipients", icon: "person" },
+  { path: "/alerts", label: "Alerts", icon: "notifications" },
+  { path: "/settings", label: "Settings", icon: "settings" }
+];
+
+export default function Sidebar({ showMobile, onCloseMobile }: SidebarProps) {
+  const [currentLocation] = useLocation();
+
   return (
-    <aside 
+    <div 
       className={cn(
-        "w-64 bg-white shadow-md z-30", 
-        isOpen ? "fixed inset-y-0 left-0 lg:relative lg:translate-x-0" : "hidden md:block"
+        "md:flex flex-col w-64 bg-white shadow-md z-30",
+        showMobile ? "fixed inset-y-0 left-0 flex" : "hidden"
       )}
     >
-      <div className="px-6 py-4 border-b border-neutral-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-              <span className="material-icons text-white text-sm">water_drop</span>
-            </div>
-            <h1 className="ml-2 text-lg font-medium text-neutral-400">BloodBank Pro</h1>
-          </div>
+      {/* Mobile close button */}
+      {showMobile && (
+        <div className="md:hidden absolute right-4 top-4">
           <button 
-            className="md:hidden text-neutral-400"
-            onClick={onClose}
+            onClick={onCloseMobile}
+            className="p-2 rounded-md text-gray-600 hover:bg-gray-100"
           >
             <span className="material-icons">close</span>
           </button>
         </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center justify-center h-16 border-b border-gray-200">
+        <h1 className="text-xl font-bold text-red-600 flex items-center">
+          <span className="material-icons mr-2">water_drop</span>
+          Blood Bank System
+        </h1>
       </div>
-      
-      <nav className="mt-4">
-        <ul>
-          {menuItems.map((item) => (
-            <li 
-              key={item.path}
-              className={cn(
-                "px-6 py-3",
-                location === item.path 
-                  ? "bg-primary/10 border-r-4 border-primary" 
-                  : "hover:bg-neutral-100"
-              )}
-            >
+
+      {/* Navigation */}
+      <div className="flex flex-col flex-1 overflow-y-auto">
+        <nav className="flex-1 px-2 py-4 space-y-1">
+          {navItems.map((item) => {
+            const isActive = 
+              item.path === "/" 
+              ? currentLocation === "/" 
+              : currentLocation.startsWith(item.path);
+
+            return (
               <Link 
+                key={item.path} 
                 href={item.path}
-                className={cn(
-                  "flex items-center",
-                  location === item.path ? "text-primary" : "text-neutral-400"
-                )}
+                onClick={() => showMobile && onCloseMobile()}
               >
-                <span className="material-icons mr-3">{item.icon}</span>
-                {item.label}
-                {item.badge && (
-                  <span className="ml-auto bg-status-error text-white text-xs px-2 py-1 rounded-full">
-                    {item.badge}
+                <div 
+                  className={cn(
+                    "flex items-center px-4 py-3 rounded-md group cursor-pointer",
+                    isActive 
+                      ? "text-gray-900 bg-gray-200 font-medium" 
+                      : "text-gray-600 hover:bg-gray-100"
+                  )}
+                >
+                  <span className={cn(
+                    "material-icons mr-3",
+                    isActive ? "text-red-600" : ""
+                  )}>
+                    {item.icon}
                   </span>
-                )}
+                  <span>{item.label}</span>
+                </div>
               </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      
-      <div className="absolute bottom-0 w-64 p-6 border-t border-neutral-200">
-        <div className="flex items-center">
-          <img 
-            className="w-10 h-10 rounded-full" 
-            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80" 
-            alt="User avatar" 
-          />
-          <div className="ml-3">
-            <p className="text-sm font-medium text-neutral-400">Dr. Sarah Johnson</p>
-            <p className="text-xs text-neutral-300">Admin</p>
-          </div>
-          <button className="ml-auto text-neutral-300">
-            <span className="material-icons">logout</span>
-          </button>
-        </div>
+            );
+          })}
+        </nav>
       </div>
-    </aside>
+    </div>
   );
 }
