@@ -3,7 +3,7 @@ services:
     name: blood-bank-system
     env: node
     buildCommand: npm install && npm run build
-    startCommand: npm start
+    startCommand: node server/migrate.js && npm start
     envVars:
       - key: NODE_ENV
         value: production
