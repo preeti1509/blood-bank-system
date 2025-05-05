@@ -1,15 +1,12 @@
 import { db, pool } from './db';
 import { seedDatabase } from './seed';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 
 export async function initializeDatabase() {
   try {
-    console.log('Pushing database schema...');
-    await execAsync('npm run db:push');
-    console.log('Database schema pushed successfully');
+    console.log('Running migrations...');
+    await migrate(db, { migrationsFolder: 'migrations' });
+    console.log('Migrations completed successfully');
 
     console.log('Starting database seeding...');
     await seedDatabase();
