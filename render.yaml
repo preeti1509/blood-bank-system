@@ -18,4 +18,8 @@ databases:
   - name: blood-bank-db
     databaseName: blood_bank
     user: blood_bank_user
+<<<<<<< HEAD
     plan: free 
+=======
+    plan: free 
+>>>>>>> 38e9279d5ab81d13fd6ad60acae2df4de09eddfc

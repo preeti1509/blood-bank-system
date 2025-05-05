@@ -24,4 +24,8 @@ main().catch((err) => {
   console.error('Migration failed');
   console.error(err);
   process.exit(1);
+<<<<<<< HEAD
 }); 
+=======
+}); 
+>>>>>>> 38e9279d5ab81d13fd6ad60acae2df4de09eddfc

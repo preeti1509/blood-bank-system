@@ -17,4 +17,8 @@ export async function initializeDatabase() {
   } finally {
     await pool.end();
   }
+<<<<<<< HEAD
 } 
+=======
+} 
+>>>>>>> 38e9279d5ab81d13fd6ad60acae2df4de09eddfc
