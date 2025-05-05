@@ -12,6 +12,7 @@
     "check": "tsc",
     "db:push": "drizzle-kit push:pg",
     "db:generate": "drizzle-kit generate:pg",
+    "db:migrate": "node -e \"import('./server/db.js').then(({ db }) => import('drizzle-orm/node-postgres/migrator').then(({ migrate }) => migrate(db, { migrationsFolder: 'migrations' })))\"",
     "postinstall": "npm run build"
   },
   "dependencies": {
