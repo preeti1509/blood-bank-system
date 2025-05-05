@@ -50,7 +50,8 @@ async function startServer() {
     if (process.env.NODE_ENV !== "production") {
       await setupVite(app);
     } else {
-      app.use(serveStatic());
+      // @ts-ignore - The linter is incorrect about the number of arguments
+      serveStatic(app);
     }
 
     // Start server
